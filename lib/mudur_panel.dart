@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'kullanicilar.dart';
 import 'urunler.dart';
+import 'main.dart'; // Login sayfasını içeri aktarın
 
 class MudurPanel extends StatefulWidget {
   const MudurPanel({Key? key}) : super(key: key);
@@ -30,8 +31,15 @@ class _MudurPanelState extends State<MudurPanel> {
       setState(() {
         displayName = userDoc.data()?['name'] ?? 'Misafir';
       });
-      print(displayName);
     }
+  }
+
+  Future<void> _logout(BuildContext context) async {
+    await _auth.signOut();
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => LoginScreen()),
+    );
   }
 
   Future<void> _addPazarlamaci(BuildContext context) async {
@@ -50,7 +58,7 @@ class _MudurPanelState extends State<MudurPanel> {
                 onChanged: (value) => name = value,
               ),
               TextField(
-                decoration: InputDecoration(labelText: 'ID'),
+                decoration: InputDecoration(labelText: 'Kullanıcı Adı'),
                 onChanged: (value) => id = value,
               ),
               TextField(
@@ -64,24 +72,36 @@ class _MudurPanelState extends State<MudurPanel> {
             TextButton(
               onPressed: () async {
                 try {
-                  await _firestore.collection('users').doc(id).set({
+                  // Firebase Authentication'a kullanıcı ekleme
+                  UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
+                    email: '$id@example.com',
+                    password: password,
+                  );
+
+                  // Firestore'a kullanıcı bilgisi ekleme
+                  await _firestore.collection('users').doc(userCredential.user?.uid).set({
                     'name': name,
                     'role': role,
-                    'password': password,
+                    'id': id,
+                    'password': password, // Şifreyi burada saklamamalısınız, genelde güvenli bir şekilde saklanır.
                   });
+
+                  // Kullanıcının oturumunu kapat
+                  await _auth.signOut(); // Sign out the user
+
+                  // Ekleme işlemi başarılı olursa
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('Pazarlamacı başarıyla eklendi!')),
                   );
                 } catch (e) {
                   print("Hata: $e");
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Hata oluştu: $e')),
+                  );
                 }
               },
               child: Text('Ekle'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text('İptal'),
             ),
           ],
         );
@@ -89,8 +109,9 @@ class _MudurPanelState extends State<MudurPanel> {
     );
   }
 
+
   Future<void> _addUrun(BuildContext context) async {
-    String isim = '', fiyat = '', stok = '';
+    String isim = '', fiyat = '', stok = '', barkod = '';
 
     await showDialog(
       context: context,
@@ -114,30 +135,41 @@ class _MudurPanelState extends State<MudurPanel> {
                 onChanged: (value) => stok = value,
                 keyboardType: TextInputType.number,
               ),
+              TextField(
+                decoration: InputDecoration(labelText: 'Barkod Numarası'),
+                onChanged: (value) => barkod = value,
+                keyboardType: TextInputType.number,
+              ),
             ],
           ),
           actions: [
             TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('İptal'),
+            ),
+            TextButton(
               onPressed: () async {
                 try {
+                  // Firestore veritabanına ürünü kaydet
                   await _firestore.collection('urunler').add({
                     'isim': isim,
                     'fiyat': double.parse(fiyat),
                     'stok': int.parse(stok),
+                    'barcode': barkod, // Barkod numarasını ekliyoruz
                   });
-                  Navigator.pop(ctx);
+
+                  Navigator.pop(ctx); // Dialogu kapat
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('Ürün başarıyla eklendi!')),
                   );
                 } catch (e) {
                   print("Hata: $e");
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Hata oluştu: $e')),
+                  );
                 }
               },
               child: Text('Ekle'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text('İptal'),
             ),
           ],
         );
@@ -149,35 +181,81 @@ class _MudurPanelState extends State<MudurPanel> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Müdür Paneli - Hoşgeldin, $displayName'),
+        title: Text(
+          'Müdür Paneli - Hoşgeldin, $displayName',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.teal,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.exit_to_app),
+            onPressed: () => _logout(context),
+          ),
+        ],
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ElevatedButton(
-              onPressed: () => _addPazarlamaci(context),
-              child: Text('Pazarlamacı Ekle'),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.teal.shade300, Colors.blue.shade100],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () => _addPazarlamaci(context),
+                  icon: Icon(Icons.person_add, size: 24),
+                  label: Text('Pazarlamacı Ekle', style: TextStyle(color: Colors.white),),
+                  style: ElevatedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    backgroundColor: Colors.red,
+                  ),
+                ),
+                SizedBox(height: 30),
+                ElevatedButton.icon(
+                  onPressed: () => _addUrun(context),
+                  icon: Icon(Icons.add_shopping_cart, size: 24),
+                  label: Text('Ürün Ekle', style: TextStyle(color: Colors.white),),
+                  style: ElevatedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    backgroundColor: Colors.deepOrange.shade500,
+                  ),
+                ),
+                SizedBox(height: 30),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => KullaniciListesi()),
+                  ),
+                  icon: Icon(Icons.people, size: 24),
+                  label: Text('Pazarlamacılar'),
+                  style: ElevatedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    backgroundColor: Colors.orange.shade500,
+                  ),
+                ),
+                SizedBox(height: 30),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => UrunListesi()),
+                  ),
+                  icon: Icon(Icons.inventory, size: 24),
+                  label: Text('Ürünler'),
+                  style: ElevatedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    backgroundColor: Colors.orange.shade300,
+                  ),
+                ),
+              ],
             ),
-            ElevatedButton(
-              onPressed: () => _addUrun(context),
-              child: Text('Ürün Ekle'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => KullaniciListesi()),
-              ),
-              child: Text('Kullanıcılar'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => UrunListesi()),
-              ),
-              child: Text('Ürünler'),
-            ),
-          ],
+          ),
         ),
       ),
     );

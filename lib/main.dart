@@ -37,12 +37,6 @@ class MyApp extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Image.asset(
-                      'assets/images/vizyon2.png', // Buraya görsel yolunu yazın
-                      width: 150, // İsteğe bağlı boyutlandırma
-                      height: 150,
-                    ),
-                    SizedBox(height: 20),
                     Text(
                       'Veriler Yükleniyor...',
                       style: TextStyle(color: Colors.white, fontSize: 16),
@@ -188,12 +182,6 @@ class LoginScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.start,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Image.asset(
-                  'assets/images/vizyon.png',
-                  height: 250, // Logonun yüksekliği
-                ),
-                SizedBox(height: 10), // Logo ile başlık arasındaki boşluk
-
                 // Başlık
                 Text(
                   'Hoş Geldiniz',
