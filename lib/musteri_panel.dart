@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter_barcode_scanner/flutter_barcode_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:toptanci/main.dart';
-import 'stock_popup.dart'; // Popup için import
-import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore importu
+import 'package:barcode_scan2/barcode_scan2.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'main.dart';
+import 'stock_popup.dart';
 
 class MusteriPanel extends StatefulWidget {
   const MusteriPanel({Key? key}) : super(key: key);
@@ -15,7 +15,7 @@ class MusteriPanel extends StatefulWidget {
 
 class _MusteriPanelState extends State<MusteriPanel> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance; // Firestore instance
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   String _scannedBarcode = "Henüz taranmadı";
 
   // Çıkış yapma fonksiyonu
@@ -34,39 +34,29 @@ class _MusteriPanelState extends State<MusteriPanel> {
     }
   }
 
+  // Kamera izni kontrol ve istek fonksiyonu
   Future<void> _requestCameraPermission() async {
     var status = await Permission.camera.status;
     if (status.isDenied) {
-      if (await Permission.camera.request().isGranted) {
-        print('Kamera izni verildi');
-      } else {
-        print('Kamera izni reddedildi');
-      }
-    } else if (status.isGranted) {
-      print('Kamera izni zaten verilmiş');
+      await Permission.camera.request();
     }
   }
 
+  // Barkod tarama ve stok güncelleme fonksiyonu
   Future<void> _scanBarcode() async {
     await _requestCameraPermission();
+
     try {
-      String scannedBarcode = await FlutterBarcodeScanner.scanBarcode(
-        "#ff6666",
-        "İptal",
-        true,
-        ScanMode.BARCODE,
-      );
+      var scanResult = await BarcodeScanner.scan();
+      setState(() {
+        _scannedBarcode = scanResult.rawContent.isNotEmpty
+            ? scanResult.rawContent
+            : "Tarama Başarısız";
+      });
 
-      if (scannedBarcode != "-1") {
-        setState(() {
-          _scannedBarcode = scannedBarcode;
-        });
-        print("Taranan Barkod: $scannedBarcode");
-
-        // Taranan barkod numarasını kullanarak stokları güncelle
-        _updateStock(scannedBarcode);
-      } else {
-        print("Barkod tarama iptal edildi.");
+      if (_scannedBarcode != "Tarama Başarısız") {
+        print("Taranan Barkod: $_scannedBarcode");
+        await _updateStock(_scannedBarcode);
       }
     } catch (e) {
       print("Barkod tarama sırasında hata oluştu: $e");
@@ -82,16 +72,14 @@ class _MusteriPanelState extends State<MusteriPanel> {
         return;
       }
 
-      // Kullanıcıya ait stoklar koleksiyonunda ürün arıyoruz
       var stoklarSnapshot = await _firestore
           .collection('users')
           .doc(userId)
           .collection('stoklar')
-          .where('barcode', isEqualTo: scannedBarcode) // Barkod ile eşleşen ürün
+          .where('barcode', isEqualTo: scannedBarcode)
           .get();
 
       if (stoklarSnapshot.docs.isNotEmpty) {
-        // Barkod eşleşti, stok miktarını 1 azaltalım
         var docRef = stoklarSnapshot.docs.first.reference;
         var docSnapshot = await docRef.get();
 
@@ -110,17 +98,6 @@ class _MusteriPanelState extends State<MusteriPanel> {
     }
   }
 
-  // Stokları incelemek için pop-up açma fonksiyonu
-  void _showStockPopup() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true, // İçeriğin kaydırılabilir olmasını sağlıyoruz
-      builder: (BuildContext context) {
-        return StockPopup(); // StockPopup widget'ını çağırıyoruz
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -135,7 +112,7 @@ class _MusteriPanelState extends State<MusteriPanel> {
             onPressed: _logout,
           ),
         ],
-        backgroundColor: Colors.teal, // Şık bir renk tonu
+        backgroundColor: Colors.teal,
       ),
       body: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 30.0),
@@ -150,11 +127,11 @@ class _MusteriPanelState extends State<MusteriPanel> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Barkod tarama butonu
               ElevatedButton(
                 onPressed: _scanBarcode,
                 style: ElevatedButton.styleFrom(
-                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 16), backgroundColor: Colors.teal.shade600, // Buton rengi
+                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+                  backgroundColor: Colors.teal.shade600,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(30),
                   ),
@@ -162,21 +139,29 @@ class _MusteriPanelState extends State<MusteriPanel> {
                 ),
                 child: Text(
                   'Barkod Tara',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: Colors.white),
+                  style: TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w500, color: Colors.white),
                 ),
               ),
               SizedBox(height: 30),
-              // Barkod sonuç metni
               Text(
                 'Sonuç: $_scannedBarcode',
                 style: TextStyle(fontSize: 20, color: Colors.black54),
               ),
               SizedBox(height: 30),
-              // Stokları İncele butonu
               ElevatedButton(
-                onPressed: _showStockPopup,
+                onPressed: () {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (BuildContext context) {
+                      return StockPopup();
+                    },
+                  );
+                },
                 style: ElevatedButton.styleFrom(
-                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 16), backgroundColor: Colors.orange, // Buton rengi
+                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+                  backgroundColor: Colors.orange,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(30),
                   ),
@@ -184,7 +169,8 @@ class _MusteriPanelState extends State<MusteriPanel> {
                 ),
                 child: Text(
                   'Stokları İncele',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: Colors.white),
+                  style: TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w500, color: Colors.white),
                 ),
               ),
             ],

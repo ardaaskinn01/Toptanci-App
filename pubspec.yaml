@@ -38,7 +38,6 @@ dependencies:
   firebase_auth: ^5.3.4
   cloud_firestore: ^5.6.0
   firebase_messaging: ^15.1.6
-  flutter_barcode_scanner: ^2.0.0
   permission_handler: ^11.3.1
   intl: ^0.20.1
   image_picker: ^1.1.2
@@ -46,6 +45,7 @@ dependencies:
   flutter_map: ^5.0.0 # En son sürümü kullanın
   latlong2: ^0.9.1
   geocoding: ^2.0.1
+  barcode_scan2: ^4.3.3
 
 dev_dependencies:
   flutter_test:
