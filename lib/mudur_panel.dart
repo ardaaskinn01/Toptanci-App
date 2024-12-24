@@ -6,7 +6,8 @@ import 'urunler.dart';
 import 'main.dart'; // Login sayfasını içeri aktarın
 
 class MudurPanel extends StatefulWidget {
-  const MudurPanel({Key? key}) : super(key: key);
+  final String id;
+  const MudurPanel({Key? key, required this.id}) : super(key: key);
 
   @override
   _MudurPanelState createState() => _MudurPanelState();
@@ -25,13 +26,10 @@ class _MudurPanelState extends State<MudurPanel> {
   }
 
   Future<void> _loadUserData() async {
-    final user = _auth.currentUser;
-    if (user != null) {
-      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      final userDoc = await _firestore.collection('users').doc(widget.id).get();
       setState(() {
         displayName = userDoc.data()?['name'] ?? 'Misafir';
       });
-    }
   }
 
   Future<void> _logout(BuildContext context) async {
@@ -72,22 +70,14 @@ class _MudurPanelState extends State<MudurPanel> {
             TextButton(
               onPressed: () async {
                 try {
-                  // Firebase Authentication'a kullanıcı ekleme
-                  UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
-                    email: '$id@example.com',
-                    password: password,
-                  );
-
                   // Firestore'a kullanıcı bilgisi ekleme
-                  await _firestore.collection('users').doc(userCredential.user?.uid).set({
+                  await _firestore.collection('users').add({
                     'name': name,
                     'role': role,
                     'id': id,
-                    'password': password, // Şifreyi burada saklamamalısınız, genelde güvenli bir şekilde saklanır.
+                    'password': password,
+                    'mudurID': widget.id
                   });
-
-                  // Kullanıcının oturumunu kapat
-                  await _auth.signOut(); // Sign out the user
 
                   // Ekleme işlemi başarılı olursa
                   Navigator.pop(ctx);
@@ -156,7 +146,7 @@ class _MudurPanelState extends State<MudurPanel> {
                     'fiyat': double.parse(fiyat),
                     'stok': int.parse(stok),
                     'barcode': barkod, // Barkod numarasını ekliyoruz
-                    'mudurID': _auth.currentUser?.uid
+                    'mudurID': widget.id
                   });
 
                   Navigator.pop(ctx); // Dialogu kapat
@@ -183,7 +173,7 @@ class _MudurPanelState extends State<MudurPanel> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Müdür Paneli - Hoşgeldin, $displayName',
+          'Müdür Paneli',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.teal,

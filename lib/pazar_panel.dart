@@ -10,7 +10,8 @@ import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
 
 class PazarPanel extends StatefulWidget {
-  const PazarPanel({Key? key}) : super(key: key);
+  final String id;
+  const PazarPanel({Key? key, required this.id}) : super(key: key);
 
   @override
   _PazarPanelState createState() => _PazarPanelState();
@@ -236,14 +237,9 @@ class _PazarPanelState extends State<PazarPanel> with SingleTickerProviderStateM
 
                 if (name.isNotEmpty && id.isNotEmpty && password.isNotEmpty && phone.isNotEmpty) {
                   try {
-                    // Firebase Authentication ile kullanıcı kaydı
-                    UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
-                      email: '$id@example.com',  // ID'yi e-posta olarak kullanıyoruz
-                      password: password,
-                    );
 
                     // Müşteri bilgilerini Firestore'a kaydetme
-                    await _firestore.collection('users').doc(userCredential.user?.uid).set({
+                    await _firestore.collection('users').add({
                       'name': name,
                       'id': id,
                       'password': password,
@@ -252,8 +248,6 @@ class _PazarPanelState extends State<PazarPanel> with SingleTickerProviderStateM
                       'photo': _imageBase64,  // Fotoğraf base64 olarak kaydediliyor
                       'pazID': _auth.currentUser?.uid,
                     });
-
-                    await _auth.signOut();
 
                     // Kullanıcı kaydı başarılıysa, dialogu kapatıyoruz
                     Navigator.pop(context);

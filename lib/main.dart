@@ -3,8 +3,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:toptanci/pazar_panel.dart';
 import 'firebase_options.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
@@ -46,13 +44,13 @@ class MyApp extends StatelessWidget {
               ),
             );
           }
-
+          final user = FirebaseAuth.instance.currentUser;
           if (snapshot.hasData) {
             final role = snapshot.data;
             if (role == 'mudur') {
-              return MudurPanel(); // Admin ise admin paneline yönlendir
+              return MudurPanel(id: user!.uid); // Admin ise admin paneline yönlendir
             } else if (role == 'pazarlama') {
-              return PazarPanel(); // User ise user paneline yönlendir
+              return PazarPanel(id: user!.uid); // User ise user paneline yönlendir
             }
             else {
               return MusteriPanel();
@@ -88,81 +86,136 @@ class LoginScreen extends StatelessWidget {
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
 
+  // Müdür kaydı oluşturmak için kullanılacak TextEditingController'lar
+  final TextEditingController managerNameController = TextEditingController();
+  final TextEditingController managerUsernameController = TextEditingController();
+  final TextEditingController managerPasswordController = TextEditingController();
+
   // Kullanıcı girişi yapma fonksiyonu
   Future<void> loginUser(String username, String password, BuildContext context) async {
     try {
       final email = '$username@example.com';
 
-      // Firebase ile giriş yapma işlemi
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      // Firestore'dan kullanıcı adı kontrolü
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('id', isEqualTo: username)
+          .get();
 
-      // Kullanıcı başarılı şekilde giriş yaptıysa
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        // Firestore'dan kullanıcı rolünü alıyoruz
-        final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-        final role = userDoc.data()?['role'];
-        final userId = user.uid;
-
-        // Rol kontrolü yapıyoruz
-        if (role == 'mudur') {
-          try {
-            final token = await FirebaseMessaging.instance.getToken();
-            await FirebaseFirestore.instance.collection('users').doc(userId).update({
-              'deviceToken': token,
-            });
-          }
-          catch (e){
-            print("HATA $e");
-          }
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => MudurPanel()),
-          );
-        } else if (role == 'pazarlama') {
-          try {
-            final token = await FirebaseMessaging.instance.getToken();
-            await FirebaseFirestore.instance.collection('users').doc(userId).update({
-              'deviceToken': token,
-            });
-          }
-          catch (e){
-            print("HATA $e");
-          }
-
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => PazarPanel()),
-          );
-        }
-        else {
-          try {
-            final token = await FirebaseMessaging.instance.getToken();
-            await FirebaseFirestore.instance.collection('users').doc(userId).update({
-              'deviceToken': token,
-            });
-          }
-          catch (e){
-            print("HATA $e");
-          }
-
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => MusteriPanel()),
-          );
-        }
+      if (querySnapshot.docs.isEmpty) {
+        _showSnackBar(context, "Kullanıcı bulunamadı. Bilgileri kontrol edin.");
+        return;
       }
-    } on FirebaseAuthException catch (e) {
-      // FirebaseAuthException hatalarında kullanıcıya basit bir mesaj gösteriyoruz
-      _showSnackBar(context, "Bilgiler Yanlış. Tekrar Deneyiniz.");
+
+      final userDoc = querySnapshot.docs.first;
+      final storedPassword = userDoc.data()['password'];
+
+      if (storedPassword != password) {
+        _showSnackBar(context, "Şifre yanlış. Lütfen tekrar deneyin.");
+        return;
+      }
+
+      final userId = userDoc.id;
+      final role = userDoc.data()['role'];
+      final name = userDoc.data()['name'];
+      var mudurID = '';// 'name' alanını buradan alıyoruz.
+      if (role == "pazarlama") {
+        mudurID = userDoc.data()['mudurID'];
+      }
+
+      // Firebase Auth kontrolü
+      UserCredential userCredential;
+      try {
+        userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+      } on FirebaseAuthException catch (_) {
+        // Eğer kullanıcı Auth'ta yoksa yeni kullanıcı oluştur
+        userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+      }
+
+      final authUid = userCredential.user!.uid;
+
+      // Eğer Auth UID ve Firestore doküman ID'si eşleşmiyorsa, eski dokümanı silip yeni doküman oluştur
+      if (authUid != userId) {
+        // Eski dokümanı sil
+        await FirebaseFirestore.instance.collection('users').doc(userId).delete();
+
+        // Yeni dokümanı oluştur
+        await FirebaseFirestore.instance.collection('users').doc(authUid).set({
+          'name': name,  // Burada 'name' değerini kullanıyoruz
+          'id': username,
+          'password': password,
+          'role': role,
+          'deviceToken': '',
+          'mudurID': mudurID,
+        });
+      }
+
+      // Cihaz token'ını kaydet
+      final token = await FirebaseMessaging.instance.getToken();
+      await FirebaseFirestore.instance.collection('users').doc(authUid).update({
+        'deviceToken': token,
+      });
+
+      // Kullanıcı rolüne göre yönlendirme
+      if (role == 'mudur') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => MudurPanel(id: authUid)),
+        );
+      } else if (role == 'pazarlama') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => PazarPanel(id: authUid)),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => MusteriPanel()),
+        );
+      }
     } catch (e) {
-      // Diğer hatalar için genel bir mesaj
+      // Genel hata mesajı
+      print("Hata: $e");
       _showSnackBar(context, 'Beklenmeyen bir hata oluştu. Lütfen tekrar deneyiniz.');
     }
   }
+
+
+  // Müdür kaydı oluşturma fonksiyonu
+  Future<void> createManager(BuildContext context) async {
+    final name = managerNameController.text.trim();
+    final username = managerUsernameController.text.trim();
+    final password = managerPasswordController.text.trim();
+
+    if (name.isEmpty || username.isEmpty || password.isEmpty) {
+      _showSnackBar(context, "Tüm alanları doldurun.");
+      return;
+    }
+
+    try {
+      await FirebaseFirestore.instance.collection('users').add({
+        'name': name,
+        'id': username,
+        'password': password,
+        'role': 'mudur',
+      });
+
+      _showSnackBar(context, "Müdür kaydı başarıyla oluşturuldu.");
+      managerNameController.clear();
+      managerUsernameController.clear();
+      managerPasswordController.clear();
+    } catch (e) {
+      print("Müdür kaydı oluşturulurken hata: $e");
+      _showSnackBar(context, "Bir hata oluştu. Lütfen tekrar deneyin.");
+    }
+  }
+
   // SnackBar göstermek için kullanılan fonksiyon
   void _showSnackBar(BuildContext context, String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -182,17 +235,15 @@ class LoginScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.start,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Başlık
                 Text(
                   'Hoş Geldiniz',
                   style: TextStyle(
                       fontSize: 30,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFFFF8805),
-                      fontStyle: FontStyle.italic
-                  ),
+                      color: Colors.black,
+                      fontStyle: FontStyle.italic),
                 ),
-                SizedBox(height: 100), // Başlık ile giriş formu arasındaki boşluk
+                SizedBox(height: 100),
 
                 // Kullanıcı adı girişi
                 TextField(
@@ -200,10 +251,6 @@ class LoginScreen extends StatelessWidget {
                   decoration: InputDecoration(
                     labelText: 'Kullanıcı Adı',
                     border: OutlineInputBorder(),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: Color(0xFF08FFFF), width: 2),
-                    ),
-                    prefixIcon: Icon(Icons.person, color: Color(0xFF08FFFF)),
                   ),
                 ),
                 SizedBox(height: 25),
@@ -214,27 +261,63 @@ class LoginScreen extends StatelessWidget {
                   decoration: InputDecoration(
                     labelText: 'Şifre',
                     border: OutlineInputBorder(),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: Color(0xFF08FFFF), width: 2),
-                    ),
-                    prefixIcon: Icon(Icons.lock, color: Color(0xFF08FFFF)),
                   ),
                   obscureText: true,
                 ),
                 SizedBox(height: 32),
 
-                // Giriş butonu
+                // Giriş yap butonu
                 ElevatedButton(
-                  onPressed: () =>
-                      loginUser(usernameController.text, passwordController.text, context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFFFF8805), // Buton rengi
-                    padding: EdgeInsets.symmetric(horizontal: 50, vertical: 15),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                  ),
-                  child: Text('Giriş Yap', style: TextStyle(fontSize: 18, color: Colors.white)),
+                  onPressed: () => loginUser(usernameController.text, passwordController.text, context),
+                  child: Text('Giriş Yap', style: TextStyle(color: Colors.black),),
+                ),
+
+                SizedBox(height: 20),
+
+                // Müdür kaydı oluştur butonu
+                TextButton(
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) {
+                        return AlertDialog(
+                          title: Text('Müdür Kaydı Oluştur', style: TextStyle(color: Colors.black),),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              TextField(
+                                controller: managerNameController,
+                                decoration: InputDecoration(labelText: 'Ad Soyad'),
+                              ),
+                              TextField(
+                                controller: managerUsernameController,
+                                decoration: InputDecoration(labelText: 'Kullanıcı Adı'),
+                              ),
+                              TextField(
+                                controller: managerPasswordController,
+                                decoration: InputDecoration(labelText: 'Şifre'),
+                                obscureText: true,
+                              ),
+                            ],
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: Text('İptal'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () {
+                                createManager(context);
+                                Navigator.pop(context);
+                              },
+                              child: Text('Kaydet'),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                  child: Text('Müdür Kaydı Oluştur', style: TextStyle(color: Colors.black),),
                 ),
               ],
             ),
@@ -244,3 +327,4 @@ class LoginScreen extends StatelessWidget {
     );
   }
 }
+

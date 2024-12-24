@@ -1,12 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'pazarlamaci.dart'; // Profil sayfası için gerekli dosya
+import 'package:firebase_auth/firebase_auth.dart';
 
 class KullaniciListesi extends StatelessWidget {
   const KullaniciListesi({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    final currentUser = FirebaseAuth.instance.currentUser; // current user'ı al
+
+    if (currentUser == null) {
+      // Kullanıcı giriş yapmamışsa, bir hata mesajı göster
+      return Scaffold(
+        appBar: AppBar(
+          title: Text('Pazarlamacılar'),
+          backgroundColor: Colors.teal,
+        ),
+        body: Center(
+          child: Text('Kullanıcı giriş yapmamış.'),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -19,11 +35,13 @@ class KullaniciListesi extends StatelessWidget {
         stream: FirebaseFirestore.instance
             .collection('users')
             .where('role', isEqualTo: 'pazarlama') // Rolü pazarlama olanları filtrele
+            .where('mudurID', isEqualTo: currentUser.uid) // MudurID ile eşleşenleri filtrele
             .snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return Center(child: CircularProgressIndicator());
           }
+          print(currentUser.uid);
           final users = snapshot.data!.docs;
           if (users.isEmpty) {
             return Center(
