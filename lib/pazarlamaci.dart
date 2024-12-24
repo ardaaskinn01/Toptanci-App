@@ -59,31 +59,37 @@ class _PazarlamaciState extends State<Pazarlamaci> {
           .doc(widget.id)
           .collection('stoklar');
 
+      // Ürün sorgusu
       final querySnapshot =
       await urunlerRef.where('isim', isEqualTo: productName).get();
       if (querySnapshot.docs.isEmpty) {
         throw Exception('Seçilen ürün bulunamadı.');
       }
-      final productData = querySnapshot.docs.first.data();
-      final int productPrice = productData['fiyat'];
+
+      // Ürün bilgilerini al ve doküman ID'sini kaydet
+      final productDoc = querySnapshot.docs.first;
+      final productId = productDoc.id; // Doküman ID'si
+      final productData = productDoc.data();
+      final double productPrice = productData['fiyat'];
       final String barcode = productData['barcode'];
 
-      final stokQuerySnapshot =
-      await stoklarRef.where('name', isEqualTo: productName).get();
+      // Kullanıcının stoklarını kontrol et
+      final stokDoc = await stoklarRef.doc(productId).get();
 
-      if (stokQuerySnapshot.docs.isNotEmpty) {
-        final docId = stokQuerySnapshot.docs.first.id;
-        final currentStok = stokQuerySnapshot.docs.first['stok'];
-        await stoklarRef.doc(docId).update({
+      if (stokDoc.exists) {
+        // Eğer stok mevcutsa güncelle
+        final currentStok = stokDoc['stok'];
+        await stoklarRef.doc(productId).update({
           'stok': currentStok + stok,
           'fiyat': productPrice,
         });
       } else {
-        await stoklarRef.add({
+        // Eğer stok yoksa yeni doküman oluştur
+        await stoklarRef.doc(productId).set({
           'name': productName,
           'stok': stok,
           'fiyat': productPrice,
-          'barcode': barcode
+          'barcode': barcode,
         });
       }
 
@@ -91,7 +97,7 @@ class _PazarlamaciState extends State<Pazarlamaci> {
         isLoading = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Ürün başarıyla güncellendi.'),
+        content: const Text('Ürün başarıyla güncellendi.'),
         backgroundColor: Colors.green,
       ));
     } catch (e) {

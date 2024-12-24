@@ -109,22 +109,11 @@ class _UrunDialogState extends State<UrunDialog> {
               ),
             ),
             const SizedBox(height: 20),
-            _buildInputRow(
-              label: "Stok",
-              onChanged: (value) {
-                _stokDegeri = int.tryParse(value) ?? 0;
-              },
-              onIncrement: () => stokGuncelle(widget.urunId, _stokDegeri),
-              onDecrement: () => stokGuncelle(widget.urunId, -_stokDegeri),
-            ),
+            // Stok için artır/azalt
+            _buildStokInputRow(),
             const SizedBox(height: 20),
-            _buildInputRow(
-              label: "Fiyat",
-              onChanged: (value) {
-                _fiyatDegeri = double.tryParse(value) ?? 0.0;
-              },
-              onIncrement: () => fiyatGuncelle(widget.urunId, _fiyatDegeri),
-            ),
+            // Fiyat için güncelle
+            _buildFiyatInputRow(),
             const SizedBox(height: 20),
             const Text('Pazarlamacılar:', style: TextStyle(fontSize: 18)),
             _buildPazarlamaciList(),
@@ -134,19 +123,16 @@ class _UrunDialogState extends State<UrunDialog> {
     );
   }
 
-  Widget _buildInputRow({
-    required String label,
-    required ValueChanged<String> onChanged,
-    required VoidCallback onIncrement,
-    VoidCallback? onDecrement,
-  }) {
+  Widget _buildStokInputRow() {
     return Row(
       children: [
         Expanded(
           child: TextField(
-            onChanged: onChanged,
+            onChanged: (value) {
+              _stokDegeri = int.tryParse(value) ?? 0;
+            },
             decoration: InputDecoration(
-              labelText: label,
+              labelText: "Stok",
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -155,16 +141,41 @@ class _UrunDialogState extends State<UrunDialog> {
         ),
         const SizedBox(width: 10),
         ElevatedButton.icon(
-          onPressed: onIncrement,
-          label: const Text("Güncelle", style: TextStyle(color: Colors.green),),
+          onPressed: () => stokGuncelle(widget.urunId, _stokDegeri),
+          icon: const Icon(Icons.add, color: Colors.green),
+          label: const Text("Artır", style: TextStyle(color: Colors.green),),
         ),
-        if (onDecrement != null) ...[
-          const SizedBox(width: 10),
-          ElevatedButton.icon(
-            onPressed: onDecrement,
-            label: const Text("Azalt", style: TextStyle(color: Colors.red),),
+        const SizedBox(width: 10),
+        ElevatedButton.icon(
+          onPressed: () => stokGuncelle(widget.urunId, -_stokDegeri),
+          icon: const Icon(Icons.remove, color: Colors.red),
+          label: const Text("Azalt", style: TextStyle(color: Colors.red),),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFiyatInputRow() {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            onChanged: (value) {
+              _fiyatDegeri = double.tryParse(value) ?? 0.0;
+            },
+            decoration: InputDecoration(
+              labelText: "Fiyat",
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
           ),
-        ],
+        ),
+        const SizedBox(width: 10),
+        ElevatedButton(
+          onPressed: () => fiyatGuncelle(widget.urunId, _fiyatDegeri),
+          child: const Text("Güncelle", style: TextStyle(color: Colors.blue),),
+        ),
       ],
     );
   }
