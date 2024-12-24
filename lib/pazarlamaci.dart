@@ -20,10 +20,10 @@ class _PazarlamaciState extends State<Pazarlamaci> {
   int? stokAmount;
   bool isLoading = false;
 
-  Future<List<Map<String, dynamic>>> _getStoklar(String userId) async {
+  Future<List<Map<String, dynamic>>> _getStoklar() async {
     final querySnapshot = await FirebaseFirestore.instance
         .collection('users')
-        .doc(userId)
+        .doc(widget.id)
         .collection('stoklar')
         .get();
 
@@ -75,10 +75,10 @@ class _PazarlamaciState extends State<Pazarlamaci> {
 
       // Kullanıcının stoklarını kontrol et
       final stokDoc = await stoklarRef.doc(productId).get();
+      final currentStok = stokDoc.exists ? stokDoc['stok'] : 0;
 
       if (stokDoc.exists) {
         // Eğer stok mevcutsa güncelle
-        final currentStok = stokDoc['stok'];
         await stoklarRef.doc(productId).update({
           'stok': currentStok + stok,
           'fiyat': productPrice,
@@ -96,8 +96,9 @@ class _PazarlamaciState extends State<Pazarlamaci> {
       setState(() {
         isLoading = false;
       });
+      // Dinamik mesaj içeriği oluşturuluyor
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text('Ürün başarıyla güncellendi.'),
+        content: Text('Ürün başarıyla güncellendi. Yeni stok: ${currentStok + stok}'),
         backgroundColor: Colors.green,
       ));
     } catch (e) {
@@ -110,6 +111,56 @@ class _PazarlamaciState extends State<Pazarlamaci> {
       ));
     }
   }
+
+
+  Future<void> _reduceStok(String productName, int stok) async {
+    setState(() {
+      isLoading = true;
+    });
+    try {
+      final stoklarRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.id)
+          .collection('stoklar');
+
+      // Seçilen ürünün stoklar koleksiyonundaki dokümanını al
+      final stokQuerySnapshot =
+      await stoklarRef.where('name', isEqualTo: productName).get();
+
+      if (stokQuerySnapshot.docs.isEmpty) {
+        throw Exception('Ürün stokta bulunamadı.');
+      }
+
+      // Doküman ID ve mevcut stok
+      final stokDoc = stokQuerySnapshot.docs.first;
+      final docId = stokDoc.id;
+      final currentStok = stokDoc['stok'];
+
+      // Stok kontrolü
+      if (currentStok < stok) {
+        throw Exception('Stok yetersiz. Mevcut stok: $currentStok');
+      }
+
+      // Stok düşürme işlemi
+      await stoklarRef.doc(docId).update({
+        'stok': currentStok - stok,
+      });
+      setState(() {
+        isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Stok başarıyla güncellendi. Yeni stok: ${currentStok - stok}'),
+        backgroundColor: Colors.green,
+      ));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Bir hata oluştu: $e'),
+        backgroundColor: Colors.red,
+      ));
+    }
+  }
+
+
 
   void _showCustomDialog({
     required String title,
@@ -205,7 +256,7 @@ class _PazarlamaciState extends State<Pazarlamaci> {
         children: [
           Expanded(
             child: FutureBuilder<List<Map<String, dynamic>>>(
-              future: _getStoklar(widget.id),
+              future: _getStoklar(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return Center(child: CircularProgressIndicator());
@@ -266,7 +317,7 @@ class _PazarlamaciState extends State<Pazarlamaci> {
                   onPressed: () => _showCustomDialog(
                     title: 'Stok Çıkar',
                     actionLabel: 'Çıkar',
-                    onConfirm: (product, stok) => print('Çıkar işlem yapılacak'),
+                    onConfirm: _reduceStok,
                   ),
                   icon: Icon(Icons.remove),
                   label: Text('Stok Çıkar'),
