@@ -108,6 +108,15 @@ class LoginScreen extends StatelessWidget {
       }
 
       final userDoc = querySnapshot.docs.first;
+      final userDoc2 = await FirebaseFirestore.instance.collection('users').doc(userDoc.id).collection('stoklar').get();
+      final userDoc3 = await FirebaseFirestore.instance.collection('users').doc(userDoc.id).collection('verilen_urunler').get();
+      final userDoc4 = await FirebaseFirestore.instance.collection('users').doc(userDoc.id).collection('alinan_urunler').get();
+
+      // Yedekleme işlemi
+      final backupStoklar = userDoc2.docs.map((doc) => doc.data()).toList();
+      final backupVerilenUrunler = userDoc3.docs.map((doc) => doc.data()).toList();
+      final backupAlinanUrunler = userDoc4.docs.map((doc) => doc.data()).toList();
+
       final storedPassword = userDoc.data()['password'];
 
       if (storedPassword != password) {
@@ -118,7 +127,7 @@ class LoginScreen extends StatelessWidget {
       final userId = userDoc.id;
       final role = userDoc.data()['role'];
       final name = userDoc.data()['name'];
-      var mudurID = '';// 'name' alanını buradan alıyoruz.
+      var mudurID = '';
       if (role == "pazarlama") {
         mudurID = userDoc.data()['mudurID'];
       }
@@ -142,18 +151,29 @@ class LoginScreen extends StatelessWidget {
 
       // Eğer Auth UID ve Firestore doküman ID'si eşleşmiyorsa, eski dokümanı silip yeni doküman oluştur
       if (authUid != userId) {
-        // Eski dokümanı sil
-        await FirebaseFirestore.instance.collection('users').doc(userId).delete();
-
-        // Yeni dokümanı oluştur
+        // Eski dokümanı silmeden önce yedekleri geri yükle
         await FirebaseFirestore.instance.collection('users').doc(authUid).set({
-          'name': name,  // Burada 'name' değerini kullanıyoruz
+          'name': name,
           'id': username,
           'password': password,
           'role': role,
           'deviceToken': '',
           'mudurID': mudurID,
         });
+
+        // Yedeklenen verileri geri yükle
+        for (var stok in backupStoklar) {
+          await FirebaseFirestore.instance.collection('users').doc(authUid).collection('stoklar').add(stok);
+        }
+        for (var verilenUrun in backupVerilenUrunler) {
+          await FirebaseFirestore.instance.collection('users').doc(authUid).collection('verilen_urunler').add(verilenUrun);
+        }
+        for (var alinanUrun in backupAlinanUrunler) {
+          await FirebaseFirestore.instance.collection('users').doc(authUid).collection('alinan_urunler').add(alinanUrun);
+        }
+
+        // Eski dokümanı sil
+        await FirebaseFirestore.instance.collection('users').doc(userId).delete();
       }
 
       // Cihaz token'ını kaydet
@@ -185,6 +205,7 @@ class LoginScreen extends StatelessWidget {
       _showSnackBar(context, 'Beklenmeyen bir hata oluştu. Lütfen tekrar deneyiniz.');
     }
   }
+
 
 
   // Müdür kaydı oluşturma fonksiyonu
