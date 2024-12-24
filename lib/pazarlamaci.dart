@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class Pazarlamaci extends StatefulWidget {
   final String id;
@@ -19,7 +20,24 @@ class _PazarlamaciState extends State<Pazarlamaci> {
   String? selectedProduct;
   int? stokAmount;
   bool isLoading = false;
+  final String currentUserId = FirebaseAuth.instance.currentUser!.uid;
 
+  // Ürünleri getiren fonksiyon (sadece mudurID ile eşleşen ürünler)
+  Future<List<Map<String, dynamic>>> _getUrunler() async {
+    final querySnapshot = await FirebaseFirestore.instance
+        .collection('urunler')
+        .where('mudurID', isEqualTo: currentUserId)
+        .get();
+
+    return querySnapshot.docs.map((doc) {
+      return {
+        'id': doc.id,
+        'name': doc['isim'],
+      };
+    }).toList();
+  }
+
+  // Kullanıcı stoklarını getiren fonksiyon
   Future<List<Map<String, dynamic>>> _getStoklar() async {
     final querySnapshot = await FirebaseFirestore.instance
         .collection('users')
@@ -35,18 +53,7 @@ class _PazarlamaciState extends State<Pazarlamaci> {
     }).toList();
   }
 
-  Future<List<Map<String, dynamic>>> _getUrunler() async {
-    final querySnapshot =
-    await FirebaseFirestore.instance.collection('urunler').get();
-
-    return querySnapshot.docs.map((doc) {
-      return {
-        'id': doc.id,
-        'name': doc['isim'],
-      };
-    }).toList();
-  }
-
+  // Stok ekleme veya güncelleme işlemi
   Future<void> _addOrUpdateStokToUser(String productName, int stok) async {
     setState(() {
       isLoading = true;
@@ -93,10 +100,18 @@ class _PazarlamaciState extends State<Pazarlamaci> {
         });
       }
 
+      // Ürünün kendi stoklarından düşüş yap
+      final productRef = FirebaseFirestore.instance.collection('urunler').doc(productId);
+      final productSnapshot = await productRef.get();
+      if (productSnapshot.exists) {
+        final currentProductStok = productSnapshot['stok'];
+        await productRef.update({'stok': currentProductStok - stok});
+      }
+
       setState(() {
         isLoading = false;
       });
-      // Dinamik mesaj içeriği oluşturuluyor
+
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Ürün başarıyla güncellendi. Yeni stok: ${currentStok + stok}'),
         backgroundColor: Colors.green,
@@ -112,7 +127,7 @@ class _PazarlamaciState extends State<Pazarlamaci> {
     }
   }
 
-
+  // Stok düşürme işlemi
   Future<void> _reduceStok(String productName, int stok) async {
     setState(() {
       isLoading = true;
@@ -160,8 +175,6 @@ class _PazarlamaciState extends State<Pazarlamaci> {
     }
   }
 
-
-
   void _showCustomDialog({
     required String title,
     required String actionLabel,
@@ -180,6 +193,8 @@ class _PazarlamaciState extends State<Pazarlamaci> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 FutureBuilder<List<Map<String, dynamic>>>(
+
+                  // Ürünleri filtrelenmiş olarak getiriyoruz
                   future: _getUrunler(),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
@@ -192,11 +207,14 @@ class _PazarlamaciState extends State<Pazarlamaci> {
 
                     final urunler = snapshot.data!;
                     return DropdownButton<String?>(
+
+                      // Dropdown'da ürünleri listele
                       isExpanded: true,
                       value: selectedProduct,
                       hint: Text('Ürün Seçin'),
                       items: urunler.map((urun) {
                         return DropdownMenuItem<String?>(
+
                           value: urun['name'],
                           child: Text(urun['name']),
                         );
@@ -256,39 +274,31 @@ class _PazarlamaciState extends State<Pazarlamaci> {
         children: [
           Expanded(
             child: FutureBuilder<List<Map<String, dynamic>>>(
+
+              // Kullanıcının stoklarını getiriyoruz
               future: _getStoklar(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return Center(child: CircularProgressIndicator());
                 } else if (snapshot.hasError) {
-                  return Center(child: Text('Hata: ${snapshot.error}'));
+                  return Text('Hata: ${snapshot.error}');
                 } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return Center(child: Text('Stok bulunamadı.'));
+                  return Center(child: Text('Bu kullanıcıya ait stok bulunamadı.'));
                 }
 
                 final stoklar = snapshot.data!;
                 return ListView.builder(
                   itemCount: stoklar.length,
                   itemBuilder: (context, index) {
-                    final urun = stoklar[index];
+                    final stok = stoklar[index];
                     return Card(
-                      margin: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
                       child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: Colors.blueAccent,
-                          child: Text(
-                            urun['name'][0].toUpperCase(),
-                            style: TextStyle(color: Colors.white),
-                          ),
+                        title: Text(stok['name']),
+                        subtitle: Text('Stok: ${stok['stok']}'),
+                        trailing: IconButton(
+                          icon: Icon(Icons.remove_circle),
+                          onPressed: () => _reduceStok(stok['name'], 1),
                         ),
-                        title: Text(
-                          urun['name'],
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text('Stok: ${urun['stok']}'),
                       ),
                     );
                   },
@@ -296,39 +306,15 @@ class _PazarlamaciState extends State<Pazarlamaci> {
               },
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: () => _showCustomDialog(
-                    title: 'Stok Ekle',
-                    actionLabel: 'Ekle',
-                    onConfirm: _addOrUpdateStokToUser,
-                  ),
-                  icon: Icon(Icons.add),
-                  label: Text('Stok Ekle'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                  ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () => _showCustomDialog(
-                    title: 'Stok Çıkar',
-                    actionLabel: 'Çıkar',
-                    onConfirm: _reduceStok,
-                  ),
-                  icon: Icon(Icons.remove),
-                  label: Text('Stok Çıkar'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showCustomDialog(
+          title: 'Pazarlamaci Stok Ekleme',
+          actionLabel: 'Stok Ekle',
+          onConfirm: _addOrUpdateStokToUser,
+        ),
+        child: Icon(Icons.add),
       ),
     );
   }

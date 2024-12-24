@@ -156,6 +156,7 @@ class _MudurPanelState extends State<MudurPanel> {
                     'fiyat': double.parse(fiyat),
                     'stok': int.parse(stok),
                     'barcode': barkod, // Barkod numarasını ekliyoruz
+                    'mudurID': _auth.currentUser?.uid
                   });
 
                   Navigator.pop(ctx); // Dialogu kapat
